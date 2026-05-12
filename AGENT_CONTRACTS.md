@@ -80,6 +80,17 @@ This file defines execution contracts for the agent layer referenced in Section 
 | Failure semantics | Retryable: infra flake, transient test harness failure.<br>Terminal: failed offline journey, failed sync under poor connectivity, unmet CSO usefulness criterion.<br>Escalation: Program steering group. |
 | Security classification | Inputs: Class A/B scenario data.<br>Outputs: Class B validation evidence, Class C deployment summary. |
 
+### 2.7 Submission Integrity Agent (Analytics quality gate support)
+
+| Contract Area | Specification |
+|---|---|
+| Trigger conditions | **Events:** `submission.ingested`, `dataset.window.closed`, `analysis.manual.run`.<br>**Schedule:** near-real-time scoring on ingest + 15-minute burst sweep + nightly backfill audit.<br>**Manual approval points:** Analyst review required for `HIGH` and `CRITICAL` confidence tiers before external signal publication. |
+| Required input schema | `run_id:string(uuid)`; `submission_batch:array<object>(minItems=1,maxItems=2000)`; `schema_version:string(regex:^v[0-9]+\.[0-9]+$)`; `window_start_utc:string(datetime)`; `window_end_utc:string(datetime)`; `source_node_id:string`; `integrity_ruleset_version:string`.<br>Validation: strict JSON schema (`additionalProperties=false`), required integrity keys present, deterministic event-time ordering, idempotency key per submission. |
+| Output schema | `artifacts:{integrity_findings_uri:string, duplicate_clusters_uri:string, anomaly_summary_uri:string, quality_gate_payload_uri:string}`; `signals:{duplicate_flood:{score:number[0,1],count:int}, missingness_schema_anomaly:{score:number[0,1],fields:array<string>}, suspicious_pattern_burst:{score:number[0,1],patterns:array<string>}}`; `triage:{confidence_tier:string(enum:LOW,MEDIUM,HIGH,CRITICAL), rationale:string, recommended_action:string}`; `status:{state:string(enum:success,partial,failed),code:string,message:string}`; `error:{retryable:boolean,category:string,details:string|null}`. |
+| SLA/SLO | Max run time: 5 min per ingest batch, 20 min nightly backfill window.<br>Retry: exponential backoff (15s, 60s, 5m), max 5 retries for retryable faults.<br>Timeout: emit `partial` findings + block downstream quality gate until completion. |
+| Failure semantics | Retryable: transient warehouse lag, feature store read timeout, temporary ruleset fetch failure.<br>Terminal: malformed submission schema, missing idempotency key baseline, integrity ruleset checksum mismatch.<br>Escalation: Data lead + Platform lead. |
+| Security classification | Inputs: Class B submission metadata + encrypted Class A references only.<br>Outputs: Class B integrity artifacts, Class C aggregate health counters for orchestration. |
+
 ---
 
 ## 3) Cross-agent dependency map (strict order, Milestones 0–5)
@@ -92,5 +103,6 @@ This file defines execution contracts for the agent layer referenced in Section 
 | 4 | M3 | Disparity Analytics Agent | M2 complete | Seeded disparity signal detected without analyst PII leakage |
 | 5 | M4 | Policy Review Agent | M3 complete | Clause detection above agreed threshold |
 | 6 | M5 | Integrated Validation Agent | M0–M4 complete | End-to-end demo validated by CSO and release sign-off |
+| 7 | Continuous | Submission Integrity Agent | M2 baseline available | Duplicate/missingness/burst integrity checks pass with confidence-tier triage emitted |
 
 **Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`).

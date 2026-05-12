@@ -2,6 +2,46 @@
 
 This document defines **mandatory orchestration stop-points** where automation must halt for explicit human decision before the workflow can continue.
 
+## Checkpoint HC-00: Submission integrity triage
+
+- **Automation stop condition**: Submission Integrity agent emits `HIGH` or `CRITICAL` confidence for duplicate floods, missingness/schema anomalies, or suspicious pattern bursts.
+- **Approver role(s)**:
+  - Data Lead (required)
+  - Platform Lead (required)
+  - Safety/Privacy Lead (required for CRITICAL tier)
+- **Required context bundle**:
+  - Run metadata: `run_id`, ruleset version/hash, execution timestamp, and source node.
+  - Integrity signal bundle: per-signal scores, triggered thresholds, and confidence tier rationale.
+  - Affected scope: submission IDs (or cluster IDs), cohort/locale concentration, and time-window burst stats.
+  - Remediation options: hold/replay list, rule-tuning proposal, and expected analyst workload impact.
+- **Decision options**:
+  - `APPROVE_TRIAGE_AND_CONTINUE`
+  - `REQUEST_RESCAN_OR_RULE_TUNE`
+  - `ESCALATE_AND_HALT`
+- **Audit log schema**:
+
+```json
+{
+  "checkpoint_id": "HC-00",
+  "decision_id": "uuid",
+  "run_id": "string",
+  "requested_at": "ISO-8601",
+  "decided_at": "ISO-8601",
+  "integrity_confidence_tier": "HIGH|CRITICAL",
+  "approvers": [
+    {"role": "Data Lead", "id": "string", "outcome": "approve|reject|abstain"},
+    {"role": "Platform Lead", "id": "string", "outcome": "approve|reject|abstain"}
+  ],
+  "decision": "APPROVE_TRIAGE_AND_CONTINUE|REQUEST_RESCAN_OR_RULE_TUNE|ESCALATE_AND_HALT",
+  "rationale": "string",
+  "artifacts": ["uri"],
+  "schema_version": "1.0"
+}
+```
+
+- **Expiry/revalidation window**:
+  - Decision expires after **72 hours** or immediately if ruleset version or schema version changes.
+
 ## Checkpoint HC-01: Pre-publication of disparity signals
 
 - **Automation stop condition**: Any run step that attempts to publish or externally expose a disparity signal (dashboard publication state change, export, or API share).

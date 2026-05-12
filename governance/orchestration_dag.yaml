@@ -18,6 +18,16 @@ nodes:
     type: task
     run: analytics.compute_disparity_signals
 
+  - id: run_submission_integrity
+    type: task
+    run: analytics.run_submission_integrity
+
+  - id: hc00_submission_integrity_triage
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-00
+    trigger_when: analytics.run_submission_integrity.confidence_tier in ["HIGH", "CRITICAL"]
+
   - id: hc01_pre_publish_disparity
     type: decision
     use: hitl_checkpoint
@@ -69,7 +79,27 @@ nodes:
 
 edges:
   - from: ingest_reports
+    to: run_submission_integrity
+
+  - from: run_submission_integrity
     to: compute_disparity_signals
+    when: analytics.run_submission_integrity.status in ["passed", "warn"]
+
+  - from: run_submission_integrity
+    to: hc00_submission_integrity_triage
+    when: analytics.run_submission_integrity.confidence_tier in ["HIGH", "CRITICAL"]
+
+  - from: hc00_submission_integrity_triage
+    to: compute_disparity_signals
+    when: decision == "APPROVE_TRIAGE_AND_CONTINUE"
+
+  - from: hc00_submission_integrity_triage
+    to: run_submission_integrity
+    when: decision == "REQUEST_RESCAN_OR_RULE_TUNE"
+
+  - from: hc00_submission_integrity_triage
+    to: end
+    when: decision == "ESCALATE_AND_HALT"
 
   - from: compute_disparity_signals
     to: hc01_pre_publish_disparity

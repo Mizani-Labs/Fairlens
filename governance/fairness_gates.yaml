@@ -76,6 +76,17 @@ section_11_6_quality_gates:
   decision_logic: >-
     Block release if any section 11.6 metric violates threshold.
 
+submission_integrity_quality_gates:
+  duplicate_flood_rate_max: 0.03
+  duplicate_cluster_growth_ratio_max: 1.5
+  missingness_spike_zscore_max: 3.0
+  schema_anomaly_rate_max: 0.01
+  suspicious_pattern_burst_rate_max: 0.02
+  suspicious_pattern_burst_zscore_max: 3.5
+  decision_logic: >-
+    Block release if duplicate floods, abnormal missingness/schema anomalies,
+    or suspicious pattern bursts exceed thresholds after confidence weighting.
+
 severity_tiers:
   - tier: S1_CRITICAL
     trigger:
@@ -89,8 +100,8 @@ severity_tiers:
     release_default: blocked
   - tier: S2_HIGH
     trigger:
-      - di_ratio_range: [0.70, 0.80)
-      - di_ratio_range_upper: (1.25, 1.35]
+      - di_ratio_range: "[0.70, 0.80)"
+      - di_ratio_range_upper: "(1.25, 1.35]"
       - p_value_lte: 0.05
         absolute_effect_size_gte: 0.05
     required_human_reviewers:
@@ -105,6 +116,34 @@ severity_tiers:
     required_human_reviewers:
       - data_lead
     release_default: warn
+
+submission_integrity_confidence_tiers:
+  - tier: LOW
+    trigger:
+      - duplicate_flood_score_lt: 0.35
+      - missingness_schema_anomaly_score_lt: 0.35
+      - suspicious_pattern_burst_score_lt: 0.35
+    triage_action: monitor_only
+    release_default: allow
+  - tier: MEDIUM
+    trigger:
+      - any_signal_score_gte: 0.35
+      - any_signal_score_lt: 0.65
+    triage_action: queue_analyst_sampling
+    release_default: warn
+  - tier: HIGH
+    trigger:
+      - any_signal_score_gte: 0.65
+      - any_signal_score_lt: 0.85
+    triage_action: analyst_review_required
+    release_default: blocked
+  - tier: CRITICAL
+    trigger:
+      - any_signal_score_gte: 0.85
+      - duplicate_flood_rate_gt: 0.06
+      - suspicious_pattern_burst_rate_gt: 0.04
+    triage_action: immediate_incident_escalation
+    release_default: blocked
 
 override_policy:
   allowed_override_roles:
@@ -150,14 +189,18 @@ cicd_enforcement:
     - cohort_metrics_json
     - intersection_metrics_json
     - section_11_6_metrics_json
+    - submission_integrity_signals_json
     - contingency_tables_json
   output_contract:
     pass_conditions:
       - no_blocking_threshold_violation
+      - submission_integrity_within_threshold
       - no_sample_size_violation
       - all_required_human_reviews_complete_for_triggered_tier
     fail_conditions:
       - any_blocking_threshold_violation
+      - submission_integrity_threshold_violation
+      - missing_submission_integrity_signals
       - insufficient_sample_size
       - missing_required_reviewer
       - missing_immutable_audit_fields_on_override
