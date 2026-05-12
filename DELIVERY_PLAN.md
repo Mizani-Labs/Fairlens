@@ -6,9 +6,9 @@ FairLens is an **offline-first, safety-first, multilingual public-interest accou
 - policy/rule systems (eligibility criteria, regulations, administrative workflows).
 
 The PoC demonstrates one end-to-end slice:
-**Arabic-speaking refugee → exclusion report captured offline → secure sync → CSO-facing disparity signal**.
+**English-first intake and analyst workflow → exclusion report captured offline → secure sync → CSO-facing disparity signal**, with Arabic refugee scenario validation as a required test case.
 
-Language baseline for PoC and near-term rollout: **Arabic, English, French, Portuguese, and Swahili**, with dialect/community-pack extension support for conflict and displacement corridors.
+Language baseline for PoC and near-term rollout is **English as the system anchor language**, with supported operational locales: Arabic, French, Portuguese, and Swahili, plus dialect/community-pack extension support for conflict and displacement corridors.
 
 ---
 
@@ -25,8 +25,9 @@ Language baseline for PoC and near-term rollout: **Arabic, English, French, Port
 
 ## 3) Unified PoC scope
 ### In scope
-- Arabic intake flow (text + optional voice-note metadata) optimized for low-literacy users.
-- i18n foundation for 5 launch languages (Arabic, English, French, Portuguese, Swahili), including RTL support and locale fallback.
+- English-first intake flow (text + optional voice-note metadata) optimized for low-literacy users.
+- Arabic scenario parity for refugee-use-case validation before each release.
+- i18n foundation for English anchor + 4 additional launch locales (Arabic, French, Portuguese, Swahili), including RTL support and locale fallback.
 - Translation governance (community glossary, reviewer sign-off, terminology freeze per release).
 - Anonymous reporter identity via on-device pseudonymous ID.
 - Offline encrypted local queue + delayed sync to partner node.
@@ -44,10 +45,10 @@ Language baseline for PoC and near-term rollout: **Arabic, English, French, Port
 ## 4) Workstreams, milestones, and exit criteria
 ### Milestone 0 — Inception & safeguards (Week 1–2)
 **Deliverables**: harm taxonomy, threat model, data-minimization matrix, governance charter.
-**Exit criteria**: threat model signed off; scenario fixed to Arabic refugee welfare exclusion.
+**Exit criteria**: threat model signed off; English-default UX validated; Arabic refugee welfare exclusion scenario approved as parity test case.
 
 ### Milestone 1 — Evidence capture client (Week 3–6)
-**Deliverables**: low-literacy intake UX, Arabic localization, pseudonymous ID module, encrypted offline persistence.
+**Deliverables**: low-literacy English-default intake UX, Arabic localization pack, pseudonymous ID module, encrypted offline persistence.
 **Exit criteria**: complete report without internet; data survives restart.
 
 ### Milestone 2 — Secure sync & federation slice (Week 5–8)
@@ -136,7 +137,7 @@ Cadence:
 
 ## 9) Immediate 30-day plan
 1. Finalize threat model and schema v0.
-2. Ship Arabic intake + pseudonymous ID module.
+2. Ship English-first intake + pseudonymous ID module, and complete Arabic parity pass.
 3. Implement encrypted local queue and sync endpoint.
 4. Stand up analyst summary dashboard with seeded test data.
 5. Run fairness/statistical harness checks and publish PoC readiness review.
@@ -145,7 +146,7 @@ Cadence:
 
 ## 10) Definition of Done (PoC)
 PoC is complete when a non-technical field tester can:
-1. submit an Arabic exclusion report fully offline,
+1. submit an English exclusion report fully offline (with Arabic parity available),
 2. sync under intermittent connectivity,
 3. and enable a CSO analyst to review aggregated disparity signals linked to testimonies/policy flags,
 while preserving reporter anonymity by default.
