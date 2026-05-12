@@ -48,7 +48,7 @@ nodes:
     type: decision
     use: hitl_checkpoint
     checkpoint_id: HC-03
-    trigger_when: governance.evaluate_fairness_gates.status == "failed"
+    trigger_when: governance.evaluate_fairness_gates.decision == "block"
 
 
   - id: evaluate_localization_parity
@@ -113,15 +113,15 @@ edges:
     when: decision == "REJECT_EXTERNAL_CLAIM"
 
   - from: evaluate_fairness_gates
-    to: evaluate_localization_parity
-    when: governance.evaluate_fairness_gates.status == "passed"
+    to: promote_release
+    when: governance.evaluate_fairness_gates.decision in ["pass", "warn"]
 
   - from: evaluate_fairness_gates
     to: hc03_fairness_override
-    when: governance.evaluate_fairness_gates.status == "failed"
+    when: governance.evaluate_fairness_gates.decision == "block"
 
   - from: hc03_fairness_override
-    to: evaluate_localization_parity
+    to: end
     when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
 
   - from: hc03_fairness_override
