@@ -1,279 +1,335 @@
-version: 1
-name: fairlens_milestone_0_5_dag
+version: 2
+name: fairlens_milestone_0_5_orchestration
 description: >-
-  Directed acyclic graph for Milestone 0 through 5 delivery with explicit
-  quality gates, human approvals, and rollback paths for regressions.
+  Milestone 0-5 orchestration DAG with atomic tasks, explicit dependencies,
+  human approval checkpoints, rollback/escalation policy, and immutable run logs.
 
-phases:
-  - intake_foundation
-  - offline_sync
-  - analytics_fairness
-  - policy_review
-  - integrated_validation
+orchestrator_agent:
+  name: orchestrator_agent
+  responsibilities:
+    - Enforce task ordering from depends_on and block execution on unmet dependencies.
+    - Evaluate gate dependencies (fairness, privacy, localization, security, offline_reliability) before advancing milestones.
+    - Pause execution at human-approval checkpoints until explicit approver decision is recorded.
+    - Trigger rollback and escalation playbooks on fairness/privacy/localization gate failures.
+    - Emit append-only immutable run logs for every state transition, decision, retry, approval, escalation, and rollback action.
+  execution_rules:
+    ordering_mode: strict_topological
+    gate_enforcement: hard_block
+    approval_mode: blocking
+    immutable_logs:
+      enabled: true
+      sink: audit/run_logs/
+      format: jsonl
+      hash_chain: sha256
 
-quality_gates:
-  fairness:
-    gate_id: qg_fairness
-    description: Bias and parity checks across protected cohorts must pass thresholds.
-  security:
-    gate_id: qg_security
-    description: Security controls, vulnerability scans, and threat mitigations validated.
-  localization:
-    gate_id: qg_localization
-    description: Locale coverage and i18n/l10n quality requirements met.
-  offline_reliability:
-    gate_id: qg_offline_reliability
-    description: Offline-first behavior, sync durability, and recovery tests pass.
+milestones:
+  "0":
+    name: foundation_alignment
+    tasks:
+      - task_id: M0_T01_scope_alignment
+        depends_on: []
+        owner_agent: planner_agent
+        inputs:
+          - DELIVERY_PLAN.md
+          - AGENT_CONTRACTS.md
+        outputs:
+          - docs/m0/scope_alignment.md
+          - docs/m0/acceptance_criteria.yaml
+        retry_policy:
+          max_attempts: 2
+          backoff: linear
+          delay_seconds: 60
+        rollback_on_fail:
+          strategy: stop_and_escalate
+          escalate_to:
+            - product_manager
+            - program_sponsor
+          reason_codes:
+            - planning_ambiguity
+      - task_id: M0_T02_data_inventory
+        depends_on:
+          - M0_T01_scope_alignment
+        owner_agent: data_governance_agent
+        inputs:
+          - docs/m0/scope_alignment.md
+        outputs:
+          - docs/m0/data_inventory.csv
+          - docs/m0/data_classification.md
+        retry_policy:
+          max_attempts: 2
+          backoff: linear
+          delay_seconds: 90
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M0_T01_scope_alignment
+          escalate_to:
+            - privacy_officer
+          reason_codes:
+            - data_inventory_incomplete
 
-approval_roles:
-  - product_manager
-  - security_lead
-  - privacy_officer
-  - fairness_reviewer
-  - localization_lead
-  - release_manager
+  "1":
+    name: offline_sync
+    tasks:
+      - task_id: M1_T01_offline_contracts
+        depends_on:
+          - M0_T02_data_inventory
+        owner_agent: platform_agent
+        inputs:
+          - docs/m0/data_classification.md
+        outputs:
+          - specs/offline/sync_contract.yaml
+          - specs/offline/conflict_resolution.md
+        retry_policy:
+          max_attempts: 3
+          backoff: exponential
+          delay_seconds: 45
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M0_T02_data_inventory
+          escalate_to:
+            - platform_lead
+          reason_codes:
+            - contract_mismatch
+      - task_id: M1_T02_sync_engine_mvp
+        depends_on:
+          - M1_T01_offline_contracts
+        owner_agent: sync_agent
+        inputs:
+          - specs/offline/sync_contract.yaml
+        outputs:
+          - src/sync_engine/
+          - tests/offline/test_sync_recovery.yaml
+        retry_policy:
+          max_attempts: 3
+          backoff: exponential
+          delay_seconds: 60
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M1_T01_offline_contracts
+          escalate_to:
+            - engineering_manager
+          reason_codes:
+            - offline_reliability_failure
 
-tasks:
-  - task_id: M0_T01_scope_alignment
-    milestone: 0
-    phase: intake_foundation
-    owner_agent: planner_agent
-    depends_on: []
-    artifacts_in:
-      - DELIVERY_PLAN.md
-    artifacts_out:
-      - docs/m0/scope_alignment.md
-      - docs/m0/acceptance_criteria.yaml
-    quality_gate:
-      - security
-      - localization
-    human_approval_required: true
+  "2":
+    name: analytics_and_fairness
+    tasks:
+      - task_id: M2_T01_event_taxonomy
+        depends_on:
+          - M1_T02_sync_engine_mvp
+        owner_agent: analytics_agent
+        inputs:
+          - docs/m0/acceptance_criteria.yaml
+          - specs/offline/sync_contract.yaml
+        outputs:
+          - specs/analytics/event_taxonomy.yaml
+          - specs/analytics/metric_dictionary.md
+        retry_policy:
+          max_attempts: 2
+          backoff: linear
+          delay_seconds: 60
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M1_T02_sync_engine_mvp
+          escalate_to:
+            - analytics_lead
+          reason_codes:
+            - taxonomy_inconsistency
+      - task_id: M2_T02_fairness_baseline
+        depends_on:
+          - M2_T01_event_taxonomy
+          - M0_T02_data_inventory
+        owner_agent: fairness_agent
+        inputs:
+          - specs/analytics/metric_dictionary.md
+          - docs/m0/data_inventory.csv
+        outputs:
+          - reports/fairness/baseline_report.md
+          - reports/fairness/parity_thresholds.yaml
+        retry_policy:
+          max_attempts: 2
+          backoff: fixed
+          delay_seconds: 120
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M2_T01_event_taxonomy
+          escalate_to:
+            - fairness_reviewer
+            - ethics_board
+          reason_codes:
+            - fairness_gate_failed
+
+  "3":
+    name: privacy_and_policy
+    tasks:
+      - task_id: M3_T01_policy_mapping
+        depends_on:
+          - M2_T02_fairness_baseline
+        owner_agent: policy_agent
+        inputs:
+          - reports/fairness/baseline_report.md
+          - docs/m0/data_classification.md
+        outputs:
+          - policies/privacy_control_matrix.yaml
+          - policies/data_retention_rules.md
+        retry_policy:
+          max_attempts: 2
+          backoff: fixed
+          delay_seconds: 90
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M0_T02_data_inventory
+          escalate_to:
+            - privacy_officer
+          reason_codes:
+            - privacy_mapping_failure
+      - task_id: M3_T02_threat_privacy_review
+        depends_on:
+          - M3_T01_policy_mapping
+          - M1_T02_sync_engine_mvp
+        owner_agent: security_agent
+        inputs:
+          - policies/privacy_control_matrix.yaml
+          - specs/offline/conflict_resolution.md
+        outputs:
+          - reports/security/threat_model.md
+          - reports/security/privacy_regression_tests.yaml
+        retry_policy:
+          max_attempts: 2
+          backoff: exponential
+          delay_seconds: 90
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M3_T01_policy_mapping
+          escalate_to:
+            - security_lead
+            - privacy_officer
+          reason_codes:
+            - privacy_gate_failed
+            - security_gate_failed
+
+  "4":
+    name: localization_and_integrated_validation
+    tasks:
+      - task_id: M4_T01_localization_packaging
+        depends_on:
+          - M2_T01_event_taxonomy
+        owner_agent: localization_agent
+        inputs:
+          - specs/analytics/event_taxonomy.yaml
+          - docs/m0/acceptance_criteria.yaml
+        outputs:
+          - i18n/locale_matrix.yaml
+          - i18n/translation_qa_report.md
+        retry_policy:
+          max_attempts: 2
+          backoff: fixed
+          delay_seconds: 75
+        rollback_on_fail:
+          strategy: rollback_to_task
+          rollback_task_id: M2_T01_event_taxonomy
+          escalate_to:
+            - localization_lead
+          reason_codes:
+            - localization_gate_failed
+      - task_id: M4_T02_end_to_end_validation
+        depends_on:
+          - M3_T02_threat_privacy_review
+          - M4_T01_localization_packaging
+          - M1_T02_sync_engine_mvp
+        owner_agent: qa_agent
+        inputs:
+          - reports/security/privacy_regression_tests.yaml
+          - reports/fairness/parity_thresholds.yaml
+          - tests/offline/test_sync_recovery.yaml
+          - i18n/translation_qa_report.md
+        outputs:
+          - reports/validation/e2e_results.md
+          - reports/validation/gate_status.yaml
+        retry_policy:
+          max_attempts: 2
+          backoff: linear
+          delay_seconds: 120
+        rollback_on_fail:
+          strategy: conditional_rollback
+          conditions:
+            fairness: M2_T02_fairness_baseline
+            privacy: M3_T01_policy_mapping
+            localization: M4_T01_localization_packaging
+            offline_reliability: M1_T02_sync_engine_mvp
+          escalate_to:
+            - release_manager
+            - governance_council
+          reason_codes:
+            - integrated_gate_failure
+
+  "5":
+    name: release_readiness
+    tasks:
+      - task_id: M5_T01_release_readiness
+        depends_on:
+          - M4_T02_end_to_end_validation
+        owner_agent: release_agent
+        inputs:
+          - reports/validation/e2e_results.md
+          - reports/validation/gate_status.yaml
+        outputs:
+          - release/m5/readiness_checklist.md
+          - release/m5/go_no_go_record.md
+        retry_policy:
+          max_attempts: 1
+          backoff: none
+          delay_seconds: 0
+        rollback_on_fail:
+          strategy: stop_and_escalate
+          escalate_to:
+            - release_manager
+            - executive_sponsor
+          reason_codes:
+            - go_no_go_blocked
+
+human_approval_checkpoints:
+  - checkpoint_id: CP_M0_SCOPE_SIGNOFF
+    after_task: M0_T01_scope_alignment
     approver_role: product_manager
-
-  - task_id: M0_T02_data_inventory
-    milestone: 0
-    phase: intake_foundation
-    owner_agent: data_governance_agent
-    depends_on:
-      - M0_T01_scope_alignment
-    artifacts_in:
-      - docs/m0/scope_alignment.md
-    artifacts_out:
-      - docs/m0/data_inventory.csv
-      - docs/m0/data_classification.md
-    quality_gate:
-      - security
-      - fairness
-    human_approval_required: true
-    approver_role: privacy_officer
-
-  - task_id: M1_T01_offline_contracts
-    milestone: 1
-    phase: offline_sync
-    owner_agent: platform_agent
-    depends_on:
-      - M0_T02_data_inventory
-    artifacts_in:
-      - docs/m0/data_classification.md
-    artifacts_out:
-      - specs/offline/sync_contract.yaml
-      - specs/offline/conflict_resolution.md
-    quality_gate:
-      - offline_reliability
-      - security
-    human_approval_required: false
-    approver_role: release_manager
-
-  - task_id: M1_T02_sync_engine_mvp
-    milestone: 1
-    phase: offline_sync
-    owner_agent: sync_agent
-    depends_on:
-      - M1_T01_offline_contracts
-    artifacts_in:
-      - specs/offline/sync_contract.yaml
-    artifacts_out:
-      - src/sync_engine/
-      - tests/offline/test_sync_recovery.yaml
-    quality_gate:
-      - offline_reliability
-      - security
-    human_approval_required: false
-    approver_role: release_manager
-
-  - task_id: M2_T01_event_taxonomy
-    milestone: 2
-    phase: analytics_fairness
-    owner_agent: analytics_agent
-    depends_on:
-      - M1_T02_sync_engine_mvp
-    artifacts_in:
-      - docs/m0/acceptance_criteria.yaml
-      - specs/offline/sync_contract.yaml
-    artifacts_out:
-      - specs/analytics/event_taxonomy.yaml
-      - specs/analytics/metric_dictionary.md
-    quality_gate:
-      - localization
-      - fairness
-    human_approval_required: false
-    approver_role: product_manager
-
-  - task_id: M2_T02_fairness_baseline
-    milestone: 2
-    phase: analytics_fairness
-    owner_agent: fairness_agent
-    depends_on:
-      - M2_T01_event_taxonomy
-      - M0_T02_data_inventory
-    artifacts_in:
-      - specs/analytics/metric_dictionary.md
-      - docs/m0/data_inventory.csv
-    artifacts_out:
-      - reports/fairness/baseline_report.md
-      - reports/fairness/parity_thresholds.yaml
-    quality_gate:
-      - fairness
-      - security
-    human_approval_required: true
+    on_reject: rollback_to_task
+    rollback_task_id: M0_T01_scope_alignment
+  - checkpoint_id: CP_M2_FAIRNESS_SIGNOFF
+    after_task: M2_T02_fairness_baseline
     approver_role: fairness_reviewer
-
-  - task_id: M3_T01_policy_mapping
-    milestone: 3
-    phase: policy_review
-    owner_agent: policy_agent
-    depends_on:
-      - M2_T02_fairness_baseline
-    artifacts_in:
-      - reports/fairness/baseline_report.md
-      - docs/m0/data_classification.md
-    artifacts_out:
-      - policies/privacy_control_matrix.yaml
-      - policies/data_retention_rules.md
-    quality_gate:
-      - security
-      - fairness
-    human_approval_required: true
+    on_reject: rollback_to_task
+    rollback_task_id: M2_T01_event_taxonomy
+  - checkpoint_id: CP_M3_PRIVACY_SIGNOFF
+    after_task: M3_T02_threat_privacy_review
     approver_role: privacy_officer
-
-  - task_id: M3_T02_threat_privacy_review
-    milestone: 3
-    phase: policy_review
-    owner_agent: security_agent
-    depends_on:
-      - M3_T01_policy_mapping
-      - M1_T02_sync_engine_mvp
-    artifacts_in:
-      - policies/privacy_control_matrix.yaml
-      - specs/offline/conflict_resolution.md
-    artifacts_out:
-      - reports/security/threat_model.md
-      - reports/security/privacy_regression_tests.yaml
-    quality_gate:
-      - security
-      - offline_reliability
-    human_approval_required: true
-    approver_role: security_lead
-
-  - task_id: M4_T01_localization_packaging
-    milestone: 4
-    phase: integrated_validation
-    owner_agent: localization_agent
-    depends_on:
-      - M2_T01_event_taxonomy
-    artifacts_in:
-      - specs/analytics/event_taxonomy.yaml
-      - docs/m0/acceptance_criteria.yaml
-    artifacts_out:
-      - i18n/locale_matrix.yaml
-      - i18n/translation_qa_report.md
-    quality_gate:
-      - localization
-      - fairness
-    human_approval_required: true
+    on_reject: rollback_to_task
+    rollback_task_id: M3_T01_policy_mapping
+  - checkpoint_id: CP_M4_LOCALE_SIGNOFF
+    after_task: M4_T01_localization_packaging
     approver_role: localization_lead
-
-  - task_id: M4_T02_end_to_end_validation
-    milestone: 4
-    phase: integrated_validation
-    owner_agent: qa_agent
-    depends_on:
-      - M3_T02_threat_privacy_review
-      - M4_T01_localization_packaging
-      - M1_T02_sync_engine_mvp
-    artifacts_in:
-      - reports/security/privacy_regression_tests.yaml
-      - reports/fairness/parity_thresholds.yaml
-      - tests/offline/test_sync_recovery.yaml
-      - i18n/translation_qa_report.md
-    artifacts_out:
-      - reports/validation/e2e_results.md
-      - reports/validation/gate_status.yaml
-    quality_gate:
-      - fairness
-      - security
-      - localization
-      - offline_reliability
-    human_approval_required: true
+    on_reject: rollback_to_task
+    rollback_task_id: M2_T01_event_taxonomy
+  - checkpoint_id: CP_M5_RELEASE_SIGNOFF
+    after_task: M5_T01_release_readiness
     approver_role: release_manager
+    on_reject: stop_and_escalate
 
-  - task_id: M5_T01_release_readiness
-    milestone: 5
-    phase: integrated_validation
-    owner_agent: release_agent
-    depends_on:
-      - M4_T02_end_to_end_validation
-    artifacts_in:
-      - reports/validation/e2e_results.md
-      - reports/validation/gate_status.yaml
-    artifacts_out:
-      - release/m5/readiness_checklist.md
-      - release/m5/go_no_go_record.md
-    quality_gate:
-      - fairness
-      - security
-      - localization
-      - offline_reliability
-    human_approval_required: true
-    approver_role: release_manager
-
-rollback_edges:
-  - on_failed_gate: fairness
-    from_task_id: M2_T02_fairness_baseline
-    rollback_to_task_id: M2_T01_event_taxonomy
-    rationale: Rework metric definitions and cohort segmentation before re-baselining.
-
-  - on_failed_gate: fairness
-    from_task_id: M4_T02_end_to_end_validation
-    rollback_to_task_id: M2_T02_fairness_baseline
-    rationale: Fairness regression detected in integrated flow; recalibrate thresholds and controls.
-
-  - on_failed_gate: security
-    from_task_id: M3_T02_threat_privacy_review
-    rollback_to_task_id: M3_T01_policy_mapping
-    rationale: Unmitigated threats require policy and control remapping.
-
-  - on_failed_gate: security
-    from_task_id: M4_T02_end_to_end_validation
-    rollback_to_task_id: M3_T02_threat_privacy_review
-    rationale: Security regression in integrated testing requires threat model updates.
-
-  - on_failed_gate: privacy
-    from_task_id: M3_T02_threat_privacy_review
-    rollback_to_task_id: M0_T02_data_inventory
-    rationale: Privacy regression requires refreshed data inventory and classification review.
-
-  - on_failed_gate: privacy
-    from_task_id: M4_T02_end_to_end_validation
-    rollback_to_task_id: M3_T01_policy_mapping
-    rationale: Privacy controls failed in integrated validation; policy mapping must be corrected.
-
-  - on_failed_gate: localization
-    from_task_id: M4_T01_localization_packaging
-    rollback_to_task_id: M2_T01_event_taxonomy
-    rationale: Terminology mismatch requires taxonomy updates and re-translation.
-
-  - on_failed_gate: offline_reliability
-    from_task_id: M4_T02_end_to_end_validation
-    rollback_to_task_id: M1_T02_sync_engine_mvp
-    rationale: Offline durability issues require sync engine hardening.
+failure_escalation_policy:
+  fairness:
+    action: rollback_and_escalate
+    rollback_target: M2_T01_event_taxonomy
+    notify:
+      - fairness_reviewer
+      - ethics_board
+  privacy:
+    action: rollback_and_escalate
+    rollback_target: M3_T01_policy_mapping
+    notify:
+      - privacy_officer
+      - legal_counsel
+  localization:
+    action: rollback_and_escalate
+    rollback_target: M4_T01_localization_packaging
+    notify:
+      - localization_lead
+      - product_manager
