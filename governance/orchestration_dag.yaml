@@ -50,6 +50,17 @@ nodes:
     checkpoint_id: HC-03
     trigger_when: governance.evaluate_fairness_gates.status == "failed"
 
+
+  - id: evaluate_localization_parity
+    type: task
+    run: governance.evaluate_localization_parity
+
+  - id: hc05_localization_override
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-05
+    trigger_when: governance.evaluate_localization_parity.status == "failed"
+
   - id: promote_release
     type: task
     run: release.promote
@@ -102,7 +113,7 @@ edges:
     when: decision == "REJECT_EXTERNAL_CLAIM"
 
   - from: evaluate_fairness_gates
-    to: promote_release
+    to: evaluate_localization_parity
     when: governance.evaluate_fairness_gates.status == "passed"
 
   - from: evaluate_fairness_gates
@@ -110,7 +121,7 @@ edges:
     when: governance.evaluate_fairness_gates.status == "failed"
 
   - from: hc03_fairness_override
-    to: promote_release
+    to: evaluate_localization_parity
     when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
 
   - from: hc03_fairness_override
@@ -118,6 +129,26 @@ edges:
     when: decision == "DEFER_PENDING_MITIGATION"
 
   - from: hc03_fairness_override
+    to: end
+    when: decision == "DENY_OVERRIDE"
+
+  - from: evaluate_localization_parity
+    to: promote_release
+    when: governance.evaluate_localization_parity.status == "passed"
+
+  - from: evaluate_localization_parity
+    to: hc05_localization_override
+    when: governance.evaluate_localization_parity.status == "failed"
+
+  - from: hc05_localization_override
+    to: promote_release
+    when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
+
+  - from: hc05_localization_override
+    to: evaluate_localization_parity
+    when: decision == "DEFER_PENDING_MITIGATION"
+
+  - from: hc05_localization_override
     to: end
     when: decision == "DENY_OVERRIDE"
 

@@ -161,3 +161,53 @@ cicd_enforcement:
       - insufficient_sample_size
       - missing_required_reviewer
       - missing_immutable_audit_fields_on_override
+
+
+localization_parity_gate:
+  scope:
+    locales_required:
+      - en
+      - ar
+    scenario_required: refugee_critical_path
+  checks:
+    en_critical_path_completeness:
+      threshold: 1.00
+      block_on_regression: true
+    ar_refugee_functional_parity:
+      threshold: 1.00
+      block_on_regression: true
+    ar_rtl_render_parity:
+      threshold: 1.00
+      block_on_regression: true
+    glossary_terminology_freeze_adherence:
+      threshold: 1.00
+      block_on_regression: true
+    locale_fallback_behavior:
+      expected_order:
+        - ar
+        - en
+      strict_match_required: true
+      block_on_regression: true
+  decision_logic: >-
+    Block release if any localization parity check fails, unless a documented
+    human override is approved at the designated HITL checkpoint.
+  required_inputs:
+    - localization_parity_report_json
+    - rtl_audit_json
+    - glossary_freeze_diff_json
+    - fallback_trace_json
+
+localization_override_policy:
+  checkpoint_id: HC-05
+  required_approvals: 3
+  required_roles:
+    - localization_lead
+    - safety_privacy_lead
+    - program_director
+  required_rationale_fields:
+    - regression_summary
+    - user_harm_assessment
+    - compensating_controls
+    - rollback_plan
+    - override_expiration_utc
+  max_override_validity_days: 7

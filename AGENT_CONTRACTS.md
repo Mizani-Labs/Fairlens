@@ -80,6 +80,18 @@ This file defines execution contracts for the agent layer referenced in Section 
 | Failure semantics | Retryable: infra flake, transient test harness failure.<br>Terminal: failed offline journey, failed sync under poor connectivity, unmet CSO usefulness criterion.<br>Escalation: Program steering group. |
 | Security classification | Inputs: Class A/B scenario data.<br>Outputs: Class B validation evidence, Class C deployment summary. |
 
+
+### 2.7 Localization Parity Validator Agent (Release Readiness)
+
+| Contract Area | Specification |
+|---|---|
+| Trigger conditions | **Events:** `release.candidate.created`, `localization.bundle.updated`, `translation.memory.frozen`.<br>**Schedule:** Mandatory at every release-candidate cut + nightly parity drift check while RC open.<br>**Manual approval points:** Human override required when parity regression is detected and a timeboxed exception is requested. |
+| Required input schema | `run_id:string(uuid)`; `milestone:int(enum:5)`; `release_candidate_id:string`; `workflow_manifest_uri:string`; `test_fixture_bundle_uri:string`; `locale_matrix:array<string>(must include "en" and "ar")`; `critical_path_steps:array<string>(minItems=1)`; `glossary_version:string`; `terminology_freeze_revision:string`; `fallback_policy_uri:string`; `rtl_required:boolean(true)`.<br>Validation: English critical-path step coverage must be 100%; Arabic refugee-scenario fixture present; glossary and freeze revisions immutable for run. |
+| Output schema | `artifacts:{parity_report_uri:string, rtl_render_audit_uri:string, glossary_drift_report_uri:string, fallback_trace_uri:string, override_packet_uri:string|null}`; `status:{state:string(enum:passed|failed|blocked), code:string, message:string, regression_count:int}`; `checks:{en_critical_path_complete:boolean, ar_refugee_functional_parity:boolean, ar_rtl_parity:boolean, glossary_freeze_adherent:boolean, fallback_behavior_valid:boolean}`; `confidence:{score:number[0,1], rationale:string}`; `error:{retryable:boolean, category:string, details:string|null}`. |
+| SLA/SLO | Max run time: 20 min full matrix run.<br>Retry: 2 retries for transient rendering/test-harness failures.<br>Timeout: fail-closed (`state=blocked`) and block release promotion. |
+| Failure semantics | Retryable: transient UI harness failure, temporary fixture fetch failures.<br>Terminal: English critical-path incompleteness, Arabic refugee scenario mismatch, RTL rendering regression, glossary freeze drift, invalid fallback sequence.<br>Escalation: Localization lead + Program lead + Safety/Privacy lead for refugee-context regressions. |
+| Security classification | Inputs: Class B localization/test metadata (Class A if scenario fixtures embed sensitive traces).<br>Outputs: Class B parity evidence artifacts, Class C gate status summary. |
+
 ---
 
 ## 3) Cross-agent dependency map (strict order, Milestones 0–5)
@@ -92,5 +104,6 @@ This file defines execution contracts for the agent layer referenced in Section 
 | 4 | M3 | Disparity Analytics Agent | M2 complete | Seeded disparity signal detected without analyst PII leakage |
 | 5 | M4 | Policy Review Agent | M3 complete | Clause detection above agreed threshold |
 | 6 | M5 | Integrated Validation Agent | M0–M4 complete | End-to-end demo validated by CSO and release sign-off |
+| 7 | M5 | Localization Parity Validator Agent | M5 Integrated Validation complete | English/Arabic localization parity gate passes or approved override recorded |
 
-**Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`).
+**Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`), except where an explicit approved override checkpoint is defined.
