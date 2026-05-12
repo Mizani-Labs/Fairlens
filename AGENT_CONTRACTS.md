@@ -80,6 +80,20 @@ This file defines execution contracts for the agent layer referenced in Section 
 | Failure semantics | Retryable: infra flake, transient test harness failure.<br>Terminal: failed offline journey, failed sync under poor connectivity, unmet CSO usefulness criterion.<br>Escalation: Program steering group. |
 | Security classification | Inputs: Class A/B scenario data.<br>Outputs: Class B validation evidence, Class C deployment summary. |
 
+### 2.7 Privacy Sentinel Agent (Cross-cutting: ingest, sync, analytics export)
+
+| Contract Area | Specification |
+|---|---|
+| Trigger conditions | **Events:** `pipeline.ingest_reports.started`, `queue.sync.requested`, `analytics.export.requested`.<br>**Schedule:** Inline at each stage invocation (blocking) + daily 03:00 UTC retrospective sweep for drift.<br>**Manual approval points:** Privacy officer review required only when sentinel result is `partial` and override is requested. |
+| Required input schema | `run_id:string(uuid)`; `stage:string(enum:ingest,sync,analytics_export)`; `payload_ref:string(uri)`; `metadata_ref:string(uri|null)`; `aggregate_ref:string(uri|null)`; `transport_capture_ref:string(uri|null)`; `retention_policy_version:string`; `deletion_sla_profile:string`.<br>Validation: payload references resolvable, policy version active, stage-specific refs present (`aggregate_ref` required for `analytics_export`). |
+| Output schema | `artifacts:{sentinel_report_uri:string, approval_artifact_uri:string, findings_uri:string}`; `checks:{pii_leakage:string(enum:pass,fail), reidentification_risk:string(enum:pass,fail,not_applicable), plaintext_sensitive_exposure:string(enum:pass,fail), retention_deletion_conformance:string(enum:pass,fail)}`; `status:{state:string(enum:approved,blocked,partial), code:string, message:string}`; `error:{retryable:boolean, category:string, details:string|null}`. |
+| Mandatory checks | **(1) Free-text/metadata PII leakage detection:** scan body text + metadata for direct/indirect identifiers, including cross-field linkage patterns.<br>**(2) Small-cell re-identification risk on aggregates:** enforce minimum cell-size + dominance threshold checks for exported cohort tables.<br>**(3) Plaintext-sensitive payload checks in logs/transport:** verify no Class A values appear in plaintext logs, traces, message headers, or transport captures.<br>**(4) Retention/deletion policy conformance:** validate TTLs, deletion markers, legal holds, and erase-request propagation against active policy profile. |
+| SLA/SLO | Max run time: ingest <= 3 min, sync <= 5 min, analytics export <= 7 min.<br>Retry: one retry for transient scanner/storage failures; no retries for policy violations.<br>Timeout: fail closed (`status=blocked`, `code=TIMEOUT_FAIL_CLOSED`). |
+| Failure semantics | Retryable: transient artifact retrieval, temporary classifier timeout.<br>Terminal: any mandatory check = `fail`, missing policy version, absent approval artifact generation.<br>Escalation: Privacy officer + Security on-call. |
+| Security classification | Inputs: Class A/B depending on stage payloads.<br>Outputs: Class B sentinel findings package + Class C approval envelope (without sensitive values). |
+
+**Release rule:** Analyst-facing publication is blocked unless `approval_artifact_uri` exists and `status.state=approved` for the corresponding `analytics_export` run.
+
 ---
 
 ## 3) Cross-agent dependency map (strict order, Milestones 0–5)
@@ -92,5 +106,6 @@ This file defines execution contracts for the agent layer referenced in Section 
 | 4 | M3 | Disparity Analytics Agent | M2 complete | Seeded disparity signal detected without analyst PII leakage |
 | 5 | M4 | Policy Review Agent | M3 complete | Clause detection above agreed threshold |
 | 6 | M5 | Integrated Validation Agent | M0–M4 complete | End-to-end demo validated by CSO and release sign-off |
+| 7 | Cross-cutting | Privacy Sentinel Agent | M1+ data flows active | Sentinel approval artifact required before analyst-facing publication |
 
 **Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`).
