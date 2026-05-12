@@ -1,163 +1,89 @@
-version: 1
+version: 2
 owner: data_lead
 last_updated: 2026-05-12
 purpose: >-
-  Deterministic fairness gate policy for CI/CD promotion decisions used by the
-  AIOps/MLOps agent.
+  Deterministic fairness gate policy that yields pass|warn|block decisions for
+  release promotion.
 
-section_metric_map:
-  section_5:
-    - id: di_ratio
-      name: Disparate Impact Ratio
-    - id: prop_test
-      name: Difference-in-proportions significance test
-    - id: eo_gap
-      name: Equal opportunity gap (TPR/FNR deltas)
-    - id: min_cell_size
-      name: Minimum cell size for cohort/intersection slicing
-  section_11_6:
-    - id: equity_signal_precision
-      name: Precision for seeded disparate-impact detections
-    - id: equity_signal_recall
-      name: Recall for seeded disparate-impact detections
-    - id: policy_flag_false_positive_rate
-      name: False-positive rate for policy/document red-flag extraction
+metrics:
+  disparate_impact_ratio:
+    id: di_ratio
+    description: ratio of favorable outcome rates for exposed vs reference group
+    thresholds:
+      block_below: 0.80
+      block_above: 1.25
+      warn_below: 0.85
+      warn_above: 1.18
 
-sampling:
-  minimum_sample_sizes:
-    cohort:
-      exposed_group_n: 100
-      reference_group_n: 100
-      required_positive_outcomes_per_group: 20
-    intersection:
-      exposed_group_n: 50
-      reference_group_n: 50
-      required_positive_outcomes_per_group: 10
-  small_sample_handling:
-    below_threshold_behavior: block
-    reason_code: INSUFFICIENT_SAMPLE_SIZE
+  difference_in_proportions_significance:
+    id: prop_sig
+    description: significance and effect-size check for rate differences
+    method_selection:
+      primary: two_proportion_z_test
+      z_test_condition: all_expected_cell_counts_gte_5
+      fallback: fisher_exact_two_sided
+      fallback_condition: any_expected_cell_count_lt_5
+    thresholds:
+      alpha_block: 0.05
+      alpha_warn: 0.10
+      absolute_effect_size_block_min: 0.05
+      absolute_effect_size_warn_min: 0.03
 
-test_selection:
-  difference_in_proportions:
-    selector: >-
-      Use two-proportion z-test when all four contingency-table expected counts
-      are >= 5; otherwise use two-sided Fisher exact test.
-    z_test:
-      expected_count_min: 5
-      tail: two_sided
-    fisher_exact:
-      trigger_when_any_expected_count_lt: 5
-      tail: two_sided
+  equal_opportunity_gap:
+    id: eo_gap
+    description: absolute gaps in TPR and FNR between exposed and reference group
+    thresholds:
+      tpr_gap_abs_block_max: 0.10
+      fnr_gap_abs_block_max: 0.10
+      tpr_gap_abs_warn_max: 0.08
+      fnr_gap_abs_warn_max: 0.08
 
-blocking_thresholds:
-  statistical_and_effect_requirements:
-    p_value_max: 0.05
-    absolute_effect_size_min:
-      metric: absolute_rate_difference
-      value: 0.05
-  di_ratio_bounds:
-    min: 0.80
-    max: 1.25
-    enforce_on:
-      - cohort
-      - intersection
-  equal_opportunity_gap_bounds:
-    tpr_delta_abs_max: 0.10
-    fnr_delta_abs_max: 0.10
-  decision_logic: >-
-    Block release if (a) DI ratio is outside bounds OR
-    (b) p-value <= p_value_max AND absolute effect size >= threshold OR
-    (c) equal opportunity gap exceeds bounds.
+sample_size_rules:
+  cohort_level:
+    exposed_min_n: 100
+    reference_min_n: 100
+    exposed_min_positive: 20
+    reference_min_positive: 20
+  intersectional_slices:
+    exposed_min_n: 50
+    reference_min_n: 50
+    exposed_min_positive: 10
+    reference_min_positive: 10
+    min_cells_with_expected_count_gte_5: 3
+  insufficient_sample_decision: block
+  insufficient_sample_reason_code: INSUFFICIENT_SAMPLE_OR_CELL_SIZE
 
-section_11_6_quality_gates:
-  equity_signal_precision_min: 0.75
-  equity_signal_recall_min: 0.70
-  policy_flag_false_positive_rate_max: 0.15
-  decision_logic: >-
-    Block release if any section 11.6 metric violates threshold.
+decision_logic:
+  evaluation_granularity:
+    - cohort
+    - intersectional_slice
+  block_if_any:
+    - insufficient_sample_or_cell_size
+    - di_ratio_outside_block_threshold
+    - significance_block_condition_met
+    - equal_opportunity_gap_outside_block_threshold
+  warn_if_any_and_no_block:
+    - di_ratio_outside_warn_threshold
+    - significance_warn_condition_met
+    - equal_opportunity_gap_outside_warn_threshold
+  else: pass
 
-severity_tiers:
-  - tier: S1_CRITICAL
-    trigger:
-      - di_ratio_lt: 0.70
-      - di_ratio_gt: 1.35
-      - tpr_or_fnr_delta_abs_gt: 0.15
-    required_human_reviewers:
-      - safety_privacy_lead
-      - data_lead
-      - product_lead
-    release_default: blocked
-  - tier: S2_HIGH
-    trigger:
-      - di_ratio_range: [0.70, 0.80)
-      - di_ratio_range_upper: (1.25, 1.35]
-      - p_value_lte: 0.05
-        absolute_effect_size_gte: 0.05
-    required_human_reviewers:
-      - data_lead
-      - safety_privacy_lead
-    release_default: blocked
-  - tier: S3_MODERATE
-    trigger:
-      - p_value_lte: 0.10
-        absolute_effect_size_gte: 0.03
-      - metric_near_boundary_within: 0.02
-    required_human_reviewers:
-      - data_lead
-    release_default: warn
-
-override_policy:
-  allowed_override_roles:
-    - safety_privacy_lead
-    - data_lead
-    - product_lead
-  minimum_approvals:
-    S1_CRITICAL: 3
-    S2_HIGH: 2
-    S3_MODERATE: 1
-  required_rationale_fields:
-    - business_justification
-    - harm_assessment
-    - mitigation_plan
-    - rollback_plan
-    - override_expiration_utc
-  immutable_audit_record_fields:
-    - override_id
-    - model_or_rule_version
-    - pipeline_run_id
-    - git_commit_sha
+required_evidence_bundle:
+  fields:
+    - run_id
     - dataset_snapshot_id
-    - metric_name
-    - cohort_or_intersection_key
-    - measured_value
-    - threshold_value
-    - statistical_test_used
-    - p_value
-    - effect_size
-    - reviewer_ids
-    - reviewer_roles
-    - decision_timestamp_utc
-    - rationale_hash
-    - signed_attestation
-  storage_requirements:
-    append_only: true
-    tamper_evident: true
-    retention_days: 2555
-
-cicd_enforcement:
-  mode: deterministic_fail_closed
-  required_inputs:
-    - cohort_metrics_json
-    - intersection_metrics_json
-    - section_11_6_metrics_json
-    - contingency_tables_json
-  output_contract:
-    pass_conditions:
-      - no_blocking_threshold_violation
-      - no_sample_size_violation
-      - all_required_human_reviews_complete_for_triggered_tier
-    fail_conditions:
-      - any_blocking_threshold_violation
-      - insufficient_sample_size
-      - missing_required_reviewer
-      - missing_immutable_audit_fields_on_override
+    - evaluated_at_utc
+    - cohorts_evaluated
+    - intersectional_slices_evaluated
+    - metrics
+    - thresholds_used
+    - statistical_tests_used
+    - p_values
+    - effect_sizes
+    - decision_per_slice
+    - final_decision
+    - triggered_rules
+  decision_enum:
+    - pass
+    - warn
+    - block

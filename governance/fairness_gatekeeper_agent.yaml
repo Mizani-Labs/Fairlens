@@ -1,0 +1,48 @@
+agent_id: fairness_gatekeeper
+version: 1
+owner: data_lead
+purpose: >-
+  Evaluate fairness_gates policy and emit a pass|warn|block decision with
+  machine-readable evidence bundle.
+
+inputs:
+  policy_uri: governance/fairness_gates.yaml
+  required_inputs:
+    - cohort_metrics_json
+    - intersection_metrics_json
+    - contingency_tables_json
+    - model_card_json
+
+outputs:
+  contract:
+    decision: enum(pass,warn,block)
+    status: enum(success,failed)
+    evidence_bundle:
+      required:
+        - cohorts
+        - intersectional_slices
+        - metrics
+        - thresholds
+        - significance
+        - triggered_rules
+        - per_slice_decisions
+        - final_decision
+
+execution:
+  run: governance.evaluate_fairness_gates
+  fail_closed: true
+  on_error_decision: block
+
+rules:
+  - name: enforce_min_sample_and_cell_sizes
+    on_violation: block
+  - name: evaluate_di_ratio
+    on_block_threshold: block
+    on_warn_threshold: warn
+  - name: evaluate_difference_in_proportions
+    test_selection: z_test_then_fisher_fallback
+    on_block_threshold: block
+    on_warn_threshold: warn
+  - name: evaluate_equal_opportunity_gap
+    on_block_threshold: block
+    on_warn_threshold: warn
