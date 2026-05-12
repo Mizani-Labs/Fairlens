@@ -1,0 +1,133 @@
+dag_id: fairlens_governance_orchestration
+version: 1
+
+decision_tasks:
+  hitl_checkpoint:
+    type: human_approval
+    blocking: true
+    timeout: P14D
+    on_timeout: fail_closed
+    decision_source: governance/hitl_checkpoints.md
+
+nodes:
+  - id: ingest_reports
+    type: task
+    run: pipeline.ingest_reports
+
+  - id: compute_disparity_signals
+    type: task
+    run: analytics.compute_disparity_signals
+
+  - id: hc01_pre_publish_disparity
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-01
+
+  - id: publish_disparity_signals
+    type: task
+    run: publish.disparity_signals
+
+  - id: extract_policy_red_flags
+    type: task
+    run: policy.extract_red_flags
+
+  - id: hc02_external_policy_claims
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-02
+
+  - id: share_policy_red_flags_externally
+    type: task
+    run: publish.policy_claims
+
+  - id: evaluate_fairness_gates
+    type: task
+    run: governance.evaluate_fairness_gates
+
+  - id: hc03_fairness_override
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-03
+    trigger_when: governance.evaluate_fairness_gates.status == "failed"
+
+  - id: promote_release
+    type: task
+    run: release.promote
+
+  - id: retention_deletion_request
+    type: task
+    run: governance.retention_exception_request
+
+  - id: hc04_retention_exception
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-04
+
+  - id: apply_retention_exception
+    type: task
+    run: governance.apply_retention_exception
+
+edges:
+  - from: ingest_reports
+    to: compute_disparity_signals
+
+  - from: compute_disparity_signals
+    to: hc01_pre_publish_disparity
+
+  - from: hc01_pre_publish_disparity
+    to: publish_disparity_signals
+    when: decision == "APPROVE_PUBLISH"
+
+  - from: hc01_pre_publish_disparity
+    to: compute_disparity_signals
+    when: decision == "REQUIRE_REVIEW"
+
+  - from: hc01_pre_publish_disparity
+    to: end
+    when: decision == "REJECT_PUBLISH"
+
+  - from: extract_policy_red_flags
+    to: hc02_external_policy_claims
+
+  - from: hc02_external_policy_claims
+    to: share_policy_red_flags_externally
+    when: decision in ["APPROVE_EXTERNAL_CLAIM", "APPROVE_WITH_QUALIFIERS"]
+
+  - from: hc02_external_policy_claims
+    to: extract_policy_red_flags
+    when: decision == "HOLD_FOR_FACT_CHECK"
+
+  - from: hc02_external_policy_claims
+    to: end
+    when: decision == "REJECT_EXTERNAL_CLAIM"
+
+  - from: evaluate_fairness_gates
+    to: promote_release
+    when: governance.evaluate_fairness_gates.status == "passed"
+
+  - from: evaluate_fairness_gates
+    to: hc03_fairness_override
+    when: governance.evaluate_fairness_gates.status == "failed"
+
+  - from: hc03_fairness_override
+    to: promote_release
+    when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
+
+  - from: hc03_fairness_override
+    to: evaluate_fairness_gates
+    when: decision == "DEFER_PENDING_MITIGATION"
+
+  - from: hc03_fairness_override
+    to: end
+    when: decision == "DENY_OVERRIDE"
+
+  - from: retention_deletion_request
+    to: hc04_retention_exception
+
+  - from: hc04_retention_exception
+    to: apply_retention_exception
+    when: decision in ["APPROVE_EXCEPTION_TIMEBOXED", "APPROVE_PARTIAL_SCOPE"]
+
+  - from: hc04_retention_exception
+    to: end
+    when: decision == "DENY_EXCEPTION"
