@@ -67,6 +67,18 @@ Language baseline for PoC and near-term rollout is **English as the system ancho
 **Deliverables**: end-to-end scenario demo, validation report, partner deployment playbook.
 **Exit criteria**: demo succeeds under poor-connectivity simulation; CSO validates advocacy usefulness.
 
+### Cross-milestone orchestration gate — `localization_gate`
+**Owners**: Offline Client Agent + Field Partner Liaison (joint accountability).
+**Purpose**: block milestone promotion and deployment unless language gates pass.
+**Required checks**:
+- English baseline checks: all mandatory flows complete.
+- Arabic parity checks for the refugee scenario: RTL rendering, terminology validation, and workflow completion parity.
+**Required artifacts**:
+- glossary diff,
+- reviewer sign-off,
+- parity test report.
+**Gate policy**: any parity regression blocks deployment until remediation and re-validation are complete.
+
 ---
 
 ## 5) AIOps/MLOps + bias-busting assurance (integrated)
@@ -80,11 +92,11 @@ Language baseline for PoC and near-term rollout is **English as the system ancho
 ### Drift, quality, and regression controls
 - Distribution drift checks for intake/population shifts.
 - Data-quality gates: schema integrity, missingness spikes, duplicate bursts.
-- Golden synthetic scenario replay per release to detect regressions.
+- Golden synthetic scenario replay per release to detect regressions, including English-baseline and Arabic-refugee parity verification.
 
 ### Operability and release policy
 - Versioned pipeline artifacts (schema/model/rule hash + test bundle).
-- Staging-to-prod promotion only when fairness and quality gates pass.
+- Staging-to-prod promotion only when fairness, quality, and `localization_gate` language checks pass.
 - Shadow-mode rollout for new detection logic.
 - On-call incident playbook for harmful false-positive/false-negative alerts.
 - Mandatory human review before externalizing high-risk claims.
