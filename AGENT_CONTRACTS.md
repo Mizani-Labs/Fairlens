@@ -108,4 +108,4 @@ This file defines execution contracts for the agent layer referenced in Section 
 | 6 | M5 | Integrated Validation Agent | M0–M4 complete | End-to-end demo validated by CSO and release sign-off |
 | 7 | Cross-cutting | Privacy Sentinel Agent | M1+ data flows active | Sentinel approval artifact required before analyst-facing publication |
 
-**Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`).
+**Execution rule:** No downstream agent may start unless upstream milestone status is `success` (not `partial`), except where an explicit approved override checkpoint is defined.

@@ -168,3 +168,48 @@ This document defines **mandatory orchestration stop-points** where automation m
 
 - **Expiry/revalidation window**:
   - Exception expires at **90 days max** (or sooner per jurisdiction); automatic revalidation request must be raised **7 days** before expiry.
+
+## Checkpoint HC-05: Localization parity override for release
+
+- **Automation stop condition**: Localization Parity Validator reports a failed parity gate for release candidate promotion (English critical-path completeness, Arabic refugee-scenario parity including RTL, glossary freeze adherence, or locale fallback behavior).
+- **Approver role(s)**:
+  - Localization Lead (required)
+  - Safety/Privacy Lead (required)
+  - Program Director (required)
+- **Required context bundle**:
+  - Localization parity report: failing checks, affected workflows, and exact regression deltas.
+  - Arabic refugee-scenario evidence pack: functional traces, screenshots, and RTL audit output.
+  - Terminology/glossary freeze diff: changed strings, ownership, and rollback feasibility.
+  - Locale fallback trace: expected vs observed fallback chain with impacted surfaces.
+  - Mitigation and rollback plan: timebox, compensating controls, and user communication.
+- **Decision options**:
+  - `APPROVE_OVERRIDE_TIMEBOXED`
+  - `DENY_OVERRIDE`
+  - `DEFER_PENDING_MITIGATION`
+- **Audit log schema**:
+
+```json
+{
+  "checkpoint_id": "HC-05",
+  "decision_id": "uuid",
+  "release_candidate_id": "string",
+  "requested_at": "ISO-8601",
+  "decided_at": "ISO-8601",
+  "approvers": [
+    {"role": "Localization Lead", "id": "string", "outcome": "approve|reject|abstain"},
+    {"role": "Safety/Privacy Lead", "id": "string", "outcome": "approve|reject|abstain"},
+    {"role": "Program Director", "id": "string", "outcome": "approve|reject|abstain"}
+  ],
+  "decision": "APPROVE_OVERRIDE_TIMEBOXED|DENY_OVERRIDE|DEFER_PENDING_MITIGATION",
+  "regressions": [
+    "en_critical_path|ar_functional_parity|ar_rtl|glossary_freeze|fallback_behavior"
+  ],
+  "expires_at": "ISO-8601",
+  "compensating_controls": ["string"],
+  "rollback_plan_uri": "uri",
+  "schema_version": "1.0"
+}
+```
+
+- **Expiry/revalidation window**:
+  - Maximum override validity is **7 days** and cannot be renewed without a new parity run and fresh checkpoint decision.

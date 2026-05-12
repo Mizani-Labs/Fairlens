@@ -1,236 +1,200 @@
-# Incident Orchestration Runbook
+# Incident Orchestration
 
-This runbook defines scenario-driven incident response flows for high-risk operational events in the Fairlens pipeline.
+This runbook defines end-to-end incident workflows for high-risk trust and safety scenarios in Fairlens operations.
 
-## Severity and SLA Defaults
+## Objectives
 
-- **SEV-1 (Critical):** Ongoing or likely user harm, privacy breach risk, or broad policy impact.  
-  - Acknowledge in **15 minutes**.  
-  - Containment started in **30 minutes**.
-- **SEV-2 (High):** Material quality, safety, or fairness degradation with limited spread.  
-  - Acknowledge in **30 minutes**.  
-  - Containment started in **60 minutes**.
-- **SEV-3 (Medium):** Isolated issue, no active downstream propagation.  
-  - Acknowledge in **4 hours**.  
-  - Containment started in **1 business day**.
+- Protect affected users and communities quickly.
+- Minimize ongoing harm while preserving forensic evidence.
+- Restore safe service operation with validated mitigations.
+- Capture learnings and harden controls to prevent recurrence.
 
-## 1) False-Positive Harm Event Flow
+## Incident Classes Covered
 
-A false-positive harm event occurs when benign content is incorrectly flagged as harmful, leading to unnecessary suppression or disruption.
+1. **Fairness Regression**: A measurable model or policy drift causes materially worse outcomes for a protected or vulnerable group.
+2. **Privacy Breach Suspicion**: Potential unauthorized access, exposure, leakage, or mishandling of personal or sensitive data.
+3. **Translation Harm**: Harmful mistranslation, omitted safety nuance, or culturally unsafe rendering that may cause user harm.
 
-### Detection sources
+## Severity Levels and Expected Timelines
 
-- Automated monitor alerts (spike in harm classifications with stable external baselines).
-- Analyst report identifying over-blocking patterns.
-- Partner escalation citing unjustified suppression outcomes.
+| Severity | Description | Initial Acknowledgement | Containment Start | Executive/Legal Notification |
+|---|---|---:|---:|---:|
+| Sev 1 | Active severe harm, legal/regulatory risk, or widespread impact | 15 min | 30 min | 30 min |
+| Sev 2 | Significant but bounded impact; potential escalatory risk | 30 min | 60 min | 2 hrs |
+| Sev 3 | Limited impact; no active severe harm | 4 hrs | 8 hrs | Next business day |
 
-### Immediate containment actions by agent
+> If incident scope is unclear, classify temporarily as higher severity until disproven.
 
-1. **Pause publication** for impacted segments, policy class, or model version.
-2. **Quarantine outputs** from the suspect window into an incident bucket; prevent downstream consumption.
-3. Switch to last known-good decision policy/model checkpoint.
-4. Mark current model/policy as **investigation-locked** to block retraining or deployment promotion.
+## Triage Ownership and Roles
 
-### Triage ownership and max response times
+### Incident Command Structure
 
-- **Primary owner:** On-call Trust & Safety Analyst.
-- **Secondary owner:** ML Ops Incident Commander.
-- **Support:** Fairness Reviewer, Partner Success lead (if partner-impacting).
-- **Max response targets:**
-  - Owner assignment: **15 minutes** from alert.
-  - Initial impact assessment: **60 minutes**.
-  - Mitigation plan posted: **2 hours**.
+- **Incident Commander (IC)**: Trust & Safety On-Call Lead (default owner of triage and coordination).
+- **Deputy IC**: Site Reliability On-Call (continuity and comms backup).
+- **Technical Lead**: Relevant model/platform engineer for affected subsystem.
+- **Risk/Policy Lead**: Responsible AI or Policy operations representative.
+- **Privacy/Security Lead**: Security engineering or privacy officer (required for any privacy suspicion).
+- **Comms Lead**: External/internal communications partner.
+- **Legal Liaison**: Counsel delegate for breach or regulated-market implications.
 
-### Required evidence logs
+### Ownership Matrix by Scenario
 
-- Alert metadata (rule ID, threshold, trigger timestamps, impacted cohorts).
-- Sampling of false-positive cases with rationale and confidence values.
-- Model/policy version, feature store snapshot ID, and rollout ring.
-- Publication pause and quarantine action logs (actor, timestamp, scope).
-- Communication trail (incident channel summary, partner notices if sent).
+| Scenario | Primary Owner | Required Co-Owners |
+|---|---|---|
+| Fairness Regression | Trust & Safety On-Call Lead | Responsible AI, ML Engineering, Product Owner |
+| Privacy Breach Suspicion | Security On-Call Lead | Privacy Officer, Legal, Infrastructure Engineering |
+| Translation Harm | Localization/Language Quality Lead | Trust & Safety, Policy, Regional Product |
 
-### Post-incident review template
+## Common Response Workflow
 
-- Incident ID, severity, start/end timestamps.
-- Detection path and time-to-detect.
-- Root cause analysis (taxonomy drift, threshold miscalibration, data shift, rule conflict).
-- User/partner impact quantification.
-- What worked / what failed in detection and response.
-- Corrective actions with owners and due dates.
-- Guardrail updates (monitor thresholds, canary checks, rollback automation).
-
-### Conditions to resume normal pipeline execution
-
-- False-positive rate returns within accepted control bounds for **two consecutive monitoring intervals**.
-- Manual spot-check by Trust & Safety approves release candidate.
-- Incident commander signs off on rollback/patch validation.
-- Partner notification complete when external impact occurred.
+1. **Detect & Declare**
+   - Open incident channel, assign IC, timestamp declaration.
+   - Record detection source (alert, user report, audit, partner escalation).
+2. **Stabilize & Scope**
+   - Confirm affected surfaces, user segments, locales, and time window.
+   - Freeze non-essential deployments on impacted components.
+3. **Contain**
+   - Apply scenario-specific containment actions (see below).
+4. **Investigate & Mitigate**
+   - Identify root technical/policy/process causes.
+   - Ship mitigation behind guardrails and monitoring.
+5. **Validate & Resume**
+   - Meet scenario-specific resume criteria.
+   - Phase traffic restoration with rollback triggers.
+6. **Post-Incident Hardening**
+   - Publish postmortem within 5 business days (Sev1/2) or 10 business days (Sev3).
 
 ---
 
-## 2) False-Negative / Undetected Disparity Event Flow
+## Scenario Workflow A: Fairness Regression
 
-A false-negative/undetected disparity event occurs when harmful or disparate outcomes are not flagged and continue through the pipeline.
+### Trigger Conditions
 
-### Detection sources
+- Significant increase in disparity metrics (e.g., FPR/FNR, outcome quality) across protected groups.
+- Spike in fairness-related complaints or support cases.
+- Audit identifies policy/model shift introducing disparate impact.
 
-- Automated monitor drift alarms (outcome disparity delta beyond threshold).
-- Analyst report from fairness audits or retrospective sampling.
-- Partner escalation reporting missed harmful/disparate outcomes.
+### Immediate Containment Steps
 
-### Immediate containment actions by agent
+1. Pause or rollback latest model/policy release for impacted flows.
+2. Enable stricter fallback policy for borderline decisions.
+3. Reduce automation level (human review for high-risk outcomes).
+4. Lock feature flags affecting ranking/classification thresholds.
 
-1. **Pause publication** for affected model route, region, language, or cohort.
-2. **Quarantine outputs** generated since earliest suspected onset.
-3. Enable stricter fallback policy (higher sensitivity, lower release threshold).
-4. Trigger backfill analysis job on impacted time range for reclassification.
+### Investigation Focus
 
-### Triage ownership and max response times
+- Data drift by cohort, language, geography, and device class.
+- Feature distribution shifts and calibration changes.
+- Label quality variance and annotation bias in recent batches.
+- Prompt/policy changes that altered decision boundaries.
 
-- **Primary owner:** Fairness On-Call Reviewer.
-- **Secondary owner:** ML Ops Incident Commander.
-- **Support:** Trust & Safety Analyst, Data Science lead.
-- **Max response targets:**
-  - Owner assignment: **15 minutes** from alert/escalation.
-  - Disparity blast radius assessment: **90 minutes**.
-  - Interim mitigation + reprocessing plan: **3 hours**.
+### Response Timelines
 
-### Required evidence logs
+- **Sev1/2**: Initial disparity diagnosis in 4 hours; mitigation candidate in 12 hours.
+- **Sev3**: Initial diagnosis in 2 business days; mitigation candidate in 5 business days.
 
-- Disparity metrics by cohort (pre-incident baseline vs incident window).
-- Confusion-matrix slices and threshold state at detection time.
-- Data lineage: input sources, feature versions, transformations.
-- Quarantine scope and reprocessing job identifiers.
-- Decision log for temporary policy tightening and rollback criteria.
+### Resume Criteria
 
-### Post-incident review template
-
-- Incident metadata and affected protected/monitored cohorts.
-- Detection gap analysis (why monitor or reviewer missed early signals).
-- Root cause (instrumentation gap, metric blind spot, data latency, model regression).
-- Scope and downstream effect analysis.
-- Remediation tasks (monitor additions, fairness constraints, retraining plan).
-- Verification criteria for completion.
-- Follow-up review date.
-
-### Conditions to resume normal pipeline execution
-
-- Reprocessed outputs pass fairness acceptance thresholds across required cohorts.
-- Enhanced monitor rules deployed and tested in canary.
-- Dual approval from Fairness owner and Incident Commander.
-- Stakeholder communication completed for impacted partners/users.
+- Disparity metrics return to approved guardrail range for 24 continuous hours.
+- No new high-confidence fairness harm reports for one full monitoring cycle.
+- Risk/Policy Lead + IC jointly approve phased rollout.
+- Rollback plan is pre-validated and on-call ownership confirmed.
 
 ---
 
-## 3) Suspected Re-Identification / Privacy Breach Event Flow
+## Scenario Workflow B: Privacy Breach Suspicion
 
-A suspected re-identification/privacy breach event occurs when outputs may reveal personal or linkable identity information beyond policy allowances.
+### Trigger Conditions
 
-### Detection sources
+- Alert or report suggests unauthorized data access/exfiltration.
+- Sensitive user data appears in unintended logs, prompts, outputs, or third-party systems.
+- Credential/key compromise with plausible data access path.
 
-- Automated privacy monitor alerts (PII leakage, linkage-risk score spikes).
-- Analyst report from privacy review or red-team testing.
-- Partner escalation reporting potential exposure of sensitive identities.
+### Immediate Containment Steps
 
-### Immediate containment actions by agent
+1. Isolate affected services, endpoints, tokens, and credentials.
+2. Rotate potentially compromised keys/secrets; revoke suspicious sessions.
+3. Halt non-essential data processing/export pipelines touching affected domains.
+4. Preserve volatile evidence (logs, snapshots, access traces) with chain-of-custody notes.
 
-1. **Pause publication immediately** across all potentially impacted endpoints.
-2. **Quarantine outputs** and lock access to incident-relevant storage partitions.
-3. Revoke/rotate active access tokens for affected service paths if leakage vector uncertain.
-4. Freeze data export and partner sync jobs until investigation scope is constrained.
+### Investigation Focus
 
-### Triage ownership and max response times
+- Access timeline, actor attribution confidence, and data classes involved.
+- Blast radius: records, regions, jurisdictions, and retention paths.
+- Whether data was viewed, copied, modified, or exfiltrated.
+- Third-party processor involvement and contractual notification duties.
 
-- **Primary owner:** Privacy/Security Incident Response Lead.
-- **Secondary owner:** ML Ops Incident Commander.
-- **Support:** Legal/Compliance, Trust & Safety, Platform Security.
-- **Max response targets:**
-  - Owner assignment: **5 minutes** from detection (default SEV-1).
-  - Initial exposure assessment: **30 minutes**.
-  - Containment completeness confirmation: **60 minutes**.
+### Response Timelines
 
-### Required evidence logs
+- **Sev1**: Forensic triage started within 30 minutes; legal/privacy review within 60 minutes.
+- **Sev2**: Forensic triage within 2 hours; legal/privacy review within 4 hours.
+- **Sev3**: Forensic triage by next business day.
 
-- Privacy alert payloads and detector confidence details.
-- Sample affected outputs (sanitized access-controlled copies only).
-- Access logs (read/write/export), token usage, and endpoint invocation traces.
-- Data retention and deletion control events during incident window.
-- Timeline of containment actions and notification decisions.
+### Resume Criteria
 
-### Post-incident review template
-
-- Incident classification (suspected vs confirmed breach).
-- Legal/compliance decision points and notification obligations.
-- Root cause and exploitability assessment.
-- Exposure scope and impacted entities.
-- Containment and eradication actions completed.
-- Preventive controls added (privacy filters, access boundaries, audits).
-- Sign-off from Security + Legal + Incident Commander.
-
-### Conditions to resume normal pipeline execution
-
-- Security confirms leak vector blocked and no active exposure path remains.
-- Required legal/compliance reviews and notifications completed.
-- Privacy regression tests pass in staging and canary.
-- Executive incident authority formally approves service restoration.
+- Access vector closed and independently verified by Security + Privacy leads.
+- Credential rotation complete with no further suspicious access for 24 hours.
+- Required legal/regulatory/customer notifications drafted or sent per counsel.
+- IC, Security Lead, and Legal Liaison sign off on restoration plan.
 
 ---
 
-## 4) Translation-Induced Harm Event Flow
+## Scenario Workflow C: Translation Harm
 
-A translation-induced harm event occurs when translation introduces semantic distortion that creates harmful, biased, or policy-violating outcomes.
+### Trigger Conditions
 
-### Detection sources
+- Harmful or unsafe mistranslation reported in safety-critical or policy-sensitive contexts.
+- Systematic omissions of risk disclaimers or consent language in one or more locales.
+- Culturally unsafe phrasing leads to user safety, discrimination, or escalation risk.
 
-- Automated monitor alerts on translation quality/safety divergence (source vs translated intent mismatch).
-- Analyst report from multilingual QA review.
-- Partner escalation from locale teams or end-user complaint channels.
+### Immediate Containment Steps
 
-### Immediate containment actions by agent
+1. Disable or rate-limit affected language pairs/workflows.
+2. Route high-risk intents to safer fallback locale or human review.
+3. Patch blocked terminology lists and critical phrase dictionaries.
+4. Add warning banner where translated guidance may be unreliable.
 
-1. **Pause publication** for impacted language pair(s), locale(s), or translation model version.
-2. **Quarantine outputs** from suspect translation components and prevent syndication.
-3. Route traffic to approved fallback translation path (human-reviewed glossary mode or previous model).
-4. Flag high-risk terms/entities list for hard-block pending correction.
+### Investigation Focus
 
-### Triage ownership and max response times
+- Locale-specific model quality deltas and recent prompt/template changes.
+- Terminology coverage gaps and segmentation/tokenization artifacts.
+- Regional policy nuance mismatches and reviewer calibration.
+- Harm taxonomy mapping: safety, legal, medical, and discrimination categories.
 
-- **Primary owner:** Localization Quality On-Call.
-- **Secondary owner:** Trust & Safety Analyst.
-- **Support:** ML Ops Incident Commander, Regional Partner Manager.
-- **Max response targets:**
-  - Owner assignment: **20 minutes**.
-  - Harm and locale impact assessment: **90 minutes**.
-  - Fallback + remediation plan: **3 hours**.
+### Response Timelines
 
-### Required evidence logs
+- **Sev1/2**: Harmful string reproduction and stop-gap patch in 2 hours.
+- **Sev1/2**: Linguistic + policy root-cause readout in 24 hours.
+- **Sev3**: Remediation patch in 3 business days.
 
-- Source text, translated text, and back-translation comparisons.
-- Language pair, model version, glossary/prompt configuration.
-- Harm label(s) assigned and reviewer adjudication notes.
-- Quarantine and publication-pause audit logs.
-- Partner/user complaint references and response timestamps.
+### Resume Criteria
 
-### Post-incident review template
-
-- Affected locales and language pairs.
-- Translation failure mode taxonomy (negation loss, politeness shift, slur mistranslation, context truncation).
-- Root cause and model/prompt/data contributors.
-- Impact and recurrence risk scoring.
-- Remediation actions (dataset fixes, glossary updates, safety constraints, reviewer playbook).
-- Validation results across representative locale test sets.
-
-### Conditions to resume normal pipeline execution
-
-- Corrected translation path passes multilingual safety and fidelity gates.
-- Critical term/entity regression suite passes for affected locale pairs.
-- Localization owner + Trust & Safety sign-off completed.
-- Monitoring thresholds tuned to detect recurrence and verified live.
+- High-risk phrase test suite passes for affected locales.
+- Human evaluation meets locale quality threshold for two consecutive review batches.
+- Trust & Safety + Localization leads approve gradual re-enable plan.
+- Monitoring alerts configured for regression on harmed intents.
 
 ---
 
-## Cross-Incident Evidence Retention
+## Communication and Documentation Requirements
 
-- Preserve incident artifacts for a minimum retention window defined by policy.
-- Store all evidence in access-controlled incident workspace.
-- Maintain immutable timeline entries for every containment and recovery action.
+- Maintain a single incident timeline with UTC timestamps.
+- Send stakeholder updates at least every 30 min (Sev1), 2 hrs (Sev2), daily (Sev3).
+- Document all containment and rollback actions with owner and timestamp.
+- Archive final incident report, action items, and control changes in ops knowledge base.
+
+## Escalation Triggers
+
+Escalate to executive response immediately if any of the following occurs:
+
+- Confirmed harm affecting vulnerable populations at scale.
+- Confirmed or likely reportable privacy breach.
+- Public/media attention or regulator inquiry.
+- Cross-region impact with unresolved containment after SLA window.
+
+## Readiness and Drills
+
+- Run quarterly tabletop exercises for each scenario.
+- Validate on-call roster and paging paths monthly.
+- Re-certify resume criteria and thresholds after major model/policy changes.
+
