@@ -1,0 +1,130 @@
+version: 1
+name: fairlens_pre_execution_gate_checklist
+description: >-
+  Machine-readable go/no-go gates for FairLens milestone execution.
+  Enforces strict upstream-success dependency and localization parity block policy.
+
+global_gates:
+  - id: upstream_success_required
+    required: true
+    rule: "Downstream execution requires upstream state=success (partial is insufficient) unless approved override exists."
+  - id: data_class_controls_mapped
+    required: true
+    rule: "Each run maps data to Class A/B/C and applies required handling controls before execution."
+  - id: localization_gate_artifacts_ready
+    required: true
+    rule: "English baseline + Arabic parity artifacts available (glossary diff, reviewer sign-off, parity test report)."
+
+milestones:
+  - id: M0
+    name: inception_safeguards
+    depends_on: []
+    go_if:
+      - "Trigger is program.kickoff or safety.review.requested."
+      - "Input schema includes locales containing en and ar."
+      - "Threat-model sign-off approver assigned."
+    no_go_if:
+      - "Missing required approvals."
+      - "Invalid locale baseline."
+      - "Policy conflict detected."
+
+  - id: M1
+    name: evidence_capture
+    depends_on: [M0]
+    go_if:
+      - "Upstream M0 state is success."
+      - "Pseudonymous ID present and intake schema valid."
+      - "Offline mode path and encrypted local persistence available."
+      - "Arabic parity approval point scheduled before release gate."
+    no_go_if:
+      - "Malformed intake schema."
+      - "Missing pseudonymous ID."
+      - "Integrity hash failure."
+
+  - id: M2
+    name: secure_sync
+    depends_on: [M1]
+    go_if:
+      - "Upstream M1 state is success."
+      - "Dedupe key present and payload signatures valid."
+      - "Key-rotation baseline approved before production enablement."
+    no_go_if:
+      - "Signature verification failure."
+      - "Key mismatch."
+      - "Replay attack detection."
+
+  - id: M3
+    name: disparity_analytics
+    depends_on: [M2]
+    go_if:
+      - "Upstream M2 state is success."
+      - "Dataset is aggregated with no raw direct identifiers."
+      - "Cohort definitions versioned; min_cell_size >= 20."
+      - "Tests selected from allowed set: DIR, ZTEST, FISHER, TPR_GAP, CALIBRATION."
+    no_go_if:
+      - "Cohort schema mismatch."
+      - "Below-minimum sample across all cohorts."
+      - "PII leakage detection."
+
+  - id: M4
+    name: policy_review
+    depends_on: [M3]
+    go_if:
+      - "Upstream M3 state is success."
+      - "Supported document type and normalized language."
+      - "OCR confidence meets configured threshold."
+      - "Reviewer sign-off workflow configured for high-risk flags."
+    no_go_if:
+      - "Unsupported format."
+      - "Corrupted source document."
+      - "Critical heuristic pack integrity failure."
+
+  - id: M5
+    name: integrated_validation
+    depends_on: [M0, M1, M2, M3, M4]
+    go_if:
+      - "All upstream milestones M0-M4 are success."
+      - "Scenario bundle includes Arabic parity scenario."
+      - "Offline-to-sync path and analyst dashboard checks included."
+      - "CSO acceptance + program lead go/no-go approval checkpoints defined."
+    no_go_if:
+      - "Failed offline journey."
+      - "Failed sync under poor connectivity."
+      - "Unmet CSO usefulness criterion."
+
+  - id: M5_localization
+    name: localization_parity_validator
+    depends_on: [M5]
+    go_if:
+      - "Integrated validation (M5) is success."
+      - "Locale matrix includes en and ar."
+      - "English critical-path coverage is 100%."
+      - "Arabic refugee fixture present; RTL required=true."
+      - "Glossary and terminology freeze revisions immutable for run."
+    no_go_if:
+      - "English critical-path incompleteness."
+      - "Arabic scenario mismatch or RTL regression."
+      - "Glossary freeze drift or invalid fallback sequence."
+      - "Timeout causes fail-closed state=blocked."
+
+execution_order:
+  - M0
+  - M1
+  - M2
+  - M3
+  - M4
+  - M5
+  - M5_localization
+
+release_blockers:
+  - "Any localization parity regression blocks deployment until remediation and re-validation."
+  - "No promotion when fairness, quality, or localization_gate checks fail."
+
+outputs_expected:
+  M0: [harm_taxonomy_uri, threat_model_uri, data_min_matrix_uri, governance_charter_uri]
+  M1: [capture_record_uri, localization_report_uri, encryption_check_uri]
+  M2: [sync_manifest_uri, conflict_report_uri, retry_queue_uri]
+  M3: [fairness_report_uri, metric_bundle_uri, dashboard_snapshot_uri]
+  M4: [flagged_clauses_uri, linkage_map_uri, reviewer_packet_uri]
+  M5: [demo_run_log_uri, validation_report_uri, deployment_playbook_uri]
+  M5_localization: [parity_report_uri, rtl_render_audit_uri, glossary_drift_report_uri, fallback_trace_uri, override_packet_uri]
