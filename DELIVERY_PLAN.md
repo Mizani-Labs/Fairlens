@@ -103,7 +103,25 @@ Language baseline for PoC and near-term rollout is **English as the system ancho
 
 ---
 
-## 6) Operating model and cadence
+## 6) Autonomous delivery artefact contract (required)
+All architecture and governance documentation is part of delivery, not optional reference material.
+
+Autonomous delivery is mandatory: milestone promotion is executed by orchestration policy only when required artefacts are present, fresh, and policy-validated.
+
+| Delivery domain | Required artefact(s) | Minimum acceptance |
+|---|---|---|
+| Program planning | `DELIVERY_PLAN.md` | Scope, milestones, and DoD are current and approved. |
+| Architecture definition | `PROJECT_ARCHITECTURE.md` | Logical layers, principles, and artefact mapping are defined. |
+| Agent operating model | `AGENT_CONTRACTS.md` | Agent responsibilities and boundaries are explicit. |
+| Governance controls | `governance/*` | Gates, checklists, and HITL controls are reviewable and versioned. |
+| Delivery orchestration | `orchestration/*` | Milestone progression path is machine-readable. |
+| Operational safety | `ops/*` | Incident and escalation procedures are documented. |
+
+A milestone cannot be marked delivered if any required artefact is missing, stale, unreviewed, or fails autonomous policy checks.
+
+---
+
+## 7) Operating model and cadence
 - **Product lead**: community-grounded problem framing.
 - **Safety/privacy lead**: threat model, anonymity controls, incident response.
 - **Data lead**: fairness metrics, statistical quality, schema governance.
@@ -117,7 +135,7 @@ Cadence:
 
 ---
 
-## 7) KPIs and acceptance metrics
+## 8) KPIs and acceptance metrics
 ### Product utility
 - % reports completed offline.
 - Median guided submission time.
@@ -138,7 +156,7 @@ Cadence:
 
 ---
 
-## 8) Top risks and mitigations
+## 9) Top risks and mitigations
 1. **Retaliation risk** → anonymity defaults, delayed sync options, duress UX.
 2. **Manipulated/low-quality submissions** → structured reporting, confidence scoring, reviewer triage.
 3. **Translation/misinterpretation harm** → glossary governance + community QA.
@@ -147,7 +165,7 @@ Cadence:
 
 ---
 
-## 9) Immediate 30-day plan
+## 10) Immediate 30-day plan
 1. Finalize threat model and schema v0.
 2. Ship English-first intake + pseudonymous ID module, and complete Arabic parity pass.
 3. Implement encrypted local queue and sync endpoint.
@@ -156,9 +174,10 @@ Cadence:
 
 ---
 
-## 10) Definition of Done (PoC)
+## 11) Definition of Done (PoC)
 PoC is complete when a non-technical field tester can:
 1. submit an English exclusion report fully offline (with Arabic parity available),
 2. sync under intermittent connectivity,
 3. and enable a CSO analyst to review aggregated disparity signals linked to testimonies/policy flags,
-while preserving reporter anonymity by default.
+while preserving reporter anonymity by default,
+and all required delivery artefacts in Section 6 are present, approved, and pass autonomous delivery policy checks.
