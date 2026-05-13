@@ -18,6 +18,24 @@ nodes:
     type: task
     run: analytics.compute_disparity_signals
 
+  - id: privacy_sentinel_ingest
+    type: task
+    run: governance.privacy_sentinel
+    params:
+      stage: ingest
+
+  - id: privacy_sentinel_sync
+    type: task
+    run: governance.privacy_sentinel
+    params:
+      stage: sync
+
+  - id: privacy_sentinel_analytics_export
+    type: task
+    run: governance.privacy_sentinel
+    params:
+      stage: analytics_export
+
   - id: hc01_pre_publish_disparity
     type: decision
     use: hitl_checkpoint
@@ -80,10 +98,37 @@ nodes:
 
 edges:
   - from: ingest_reports
+    to: privacy_sentinel_ingest
+
+  - from: privacy_sentinel_ingest
     to: compute_disparity_signals
+    when: governance.privacy_sentinel.status.state == "approved"
+
+  - from: privacy_sentinel_ingest
+    to: end
+    when: governance.privacy_sentinel.status.state in ["blocked", "partial"]
+
+  - from: retention_deletion_request
+    to: privacy_sentinel_sync
+
+  - from: privacy_sentinel_sync
+    to: hc04_retention_exception
+    when: governance.privacy_sentinel.status.state == "approved"
+
+  - from: privacy_sentinel_sync
+    to: end
+    when: governance.privacy_sentinel.status.state in ["blocked", "partial"]
 
   - from: compute_disparity_signals
+    to: privacy_sentinel_analytics_export
+
+  - from: privacy_sentinel_analytics_export
     to: hc01_pre_publish_disparity
+    when: governance.privacy_sentinel.status.state == "approved" and governance.privacy_sentinel.artifacts.approval_artifact_uri != null
+
+  - from: privacy_sentinel_analytics_export
+    to: end
+    when: governance.privacy_sentinel.status.state in ["blocked", "partial"] or governance.privacy_sentinel.artifacts.approval_artifact_uri == null
 
   - from: hc01_pre_publish_disparity
     to: publish_disparity_signals
@@ -131,29 +176,6 @@ edges:
   - from: hc03_fairness_override
     to: end
     when: decision == "DENY_OVERRIDE"
-
-  - from: evaluate_localization_parity
-    to: promote_release
-    when: governance.evaluate_localization_parity.status == "passed"
-
-  - from: evaluate_localization_parity
-    to: hc05_localization_override
-    when: governance.evaluate_localization_parity.status == "failed"
-
-  - from: hc05_localization_override
-    to: promote_release
-    when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
-
-  - from: hc05_localization_override
-    to: evaluate_localization_parity
-    when: decision == "DEFER_PENDING_MITIGATION"
-
-  - from: hc05_localization_override
-    to: end
-    when: decision == "DENY_OVERRIDE"
-
-  - from: retention_deletion_request
-    to: hc04_retention_exception
 
   - from: hc04_retention_exception
     to: apply_retention_exception
