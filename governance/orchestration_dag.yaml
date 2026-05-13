@@ -18,23 +18,15 @@ nodes:
     type: task
     run: analytics.compute_disparity_signals
 
-  - id: privacy_sentinel_ingest
+  - id: run_submission_integrity
     type: task
-    run: governance.privacy_sentinel
-    params:
-      stage: ingest
+    run: analytics.run_submission_integrity
 
-  - id: privacy_sentinel_sync
-    type: task
-    run: governance.privacy_sentinel
-    params:
-      stage: sync
-
-  - id: privacy_sentinel_analytics_export
-    type: task
-    run: governance.privacy_sentinel
-    params:
-      stage: analytics_export
+  - id: hc00_submission_integrity_triage
+    type: decision
+    use: hitl_checkpoint
+    checkpoint_id: HC-00
+    trigger_when: analytics.run_submission_integrity.confidence_tier in ["HIGH", "CRITICAL"]
 
   - id: hc01_pre_publish_disparity
     type: decision
@@ -66,18 +58,7 @@ nodes:
     type: decision
     use: hitl_checkpoint
     checkpoint_id: HC-03
-    trigger_when: governance.evaluate_fairness_gates.decision == "block"
-
-
-  - id: evaluate_localization_parity
-    type: task
-    run: governance.evaluate_localization_parity
-
-  - id: hc05_localization_override
-    type: decision
-    use: hitl_checkpoint
-    checkpoint_id: HC-05
-    trigger_when: governance.evaluate_localization_parity.status == "failed"
+    trigger_when: governance.evaluate_fairness_gates.status == "failed"
 
   - id: promote_release
     type: task
@@ -98,37 +79,30 @@ nodes:
 
 edges:
   - from: ingest_reports
-    to: privacy_sentinel_ingest
+    to: run_submission_integrity
 
-  - from: privacy_sentinel_ingest
+  - from: run_submission_integrity
     to: compute_disparity_signals
-    when: governance.privacy_sentinel.status.state == "approved"
+    when: analytics.run_submission_integrity.status in ["passed", "warn"]
 
-  - from: privacy_sentinel_ingest
+  - from: run_submission_integrity
+    to: hc00_submission_integrity_triage
+    when: analytics.run_submission_integrity.confidence_tier in ["HIGH", "CRITICAL"]
+
+  - from: hc00_submission_integrity_triage
+    to: compute_disparity_signals
+    when: decision == "APPROVE_TRIAGE_AND_CONTINUE"
+
+  - from: hc00_submission_integrity_triage
+    to: run_submission_integrity
+    when: decision == "REQUEST_RESCAN_OR_RULE_TUNE"
+
+  - from: hc00_submission_integrity_triage
     to: end
-    when: governance.privacy_sentinel.status.state in ["blocked", "partial"]
-
-  - from: retention_deletion_request
-    to: privacy_sentinel_sync
-
-  - from: privacy_sentinel_sync
-    to: hc04_retention_exception
-    when: governance.privacy_sentinel.status.state == "approved"
-
-  - from: privacy_sentinel_sync
-    to: end
-    when: governance.privacy_sentinel.status.state in ["blocked", "partial"]
+    when: decision == "ESCALATE_AND_HALT"
 
   - from: compute_disparity_signals
-    to: privacy_sentinel_analytics_export
-
-  - from: privacy_sentinel_analytics_export
     to: hc01_pre_publish_disparity
-    when: governance.privacy_sentinel.status.state == "approved" and governance.privacy_sentinel.artifacts.approval_artifact_uri != null
-
-  - from: privacy_sentinel_analytics_export
-    to: end
-    when: governance.privacy_sentinel.status.state in ["blocked", "partial"] or governance.privacy_sentinel.artifacts.approval_artifact_uri == null
 
   - from: hc01_pre_publish_disparity
     to: publish_disparity_signals
@@ -159,14 +133,14 @@ edges:
 
   - from: evaluate_fairness_gates
     to: promote_release
-    when: governance.evaluate_fairness_gates.decision in ["pass", "warn"]
+    when: governance.evaluate_fairness_gates.status == "passed"
 
   - from: evaluate_fairness_gates
     to: hc03_fairness_override
-    when: governance.evaluate_fairness_gates.decision == "block"
+    when: governance.evaluate_fairness_gates.status == "failed"
 
   - from: hc03_fairness_override
-    to: end
+    to: promote_release
     when: decision == "APPROVE_OVERRIDE_TIMEBOXED"
 
   - from: hc03_fairness_override
@@ -176,6 +150,9 @@ edges:
   - from: hc03_fairness_override
     to: end
     when: decision == "DENY_OVERRIDE"
+
+  - from: retention_deletion_request
+    to: hc04_retention_exception
 
   - from: hc04_retention_exception
     to: apply_retention_exception
